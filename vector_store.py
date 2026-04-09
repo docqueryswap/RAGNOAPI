@@ -24,7 +24,7 @@ class PineconeVectorStore:
         records = []
         for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
             records.append({
-                'id': f'{metadata['doc_id']}-{i}',
+                'id': metadata['doc_id'] + '-' + str(i),
                 'values': vector.tolist(),
                 'metadata': {'text': chunk, **metadata}
             })

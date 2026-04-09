@@ -1,27 +1,25 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from sentence_transformers import SentenceTransformer
 
 class TextProcessor:
     def __init__(self):
-        self._model = None
+        self.model = None
 
-    @property
-    def model(self):
-        if self._model is None:
-            from sentence_transformers import SentenceTransformer
-            # Tiny model: 17MB, works on 512MB Render
-            self._model = SentenceTransformer("TaylorAI/gte-tiny")
-        return self._model
+    def _load_model(self):
+        # Load model ONCE at startup
+        if self.model is None:
+            self.model = SentenceTransformer("all-MiniLM-L6-v2")
 
     def split_text(self, text):
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=300,  # Smaller chunks = less memory
+            chunk_size=300,
             chunk_overlap=30
         )
         return splitter.split_text(text)
 
-    def generate_embeddings(self, chunks):
-        # Process in smaller batches
-        return self.model.encode(chunks, normalize_embeddings=True, batch_size=8)
+    def generate_single_embedding(self, chunk):
+        # Process ONE chunk at a time to avoid memory spikes
+        return self.model.encode(chunk, normalize_embeddings=True)
 
     def generate_query_embedding(self, query):
         return self.model.encode(query, normalize_embeddings=True)

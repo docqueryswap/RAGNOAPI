@@ -5,11 +5,11 @@ from pinecone import Pinecone, ServerlessSpec
 
 class PineconeVectorStore:
     def __init__(self):
-        self.index_name = 'docuquery'
+        self.index_name = os.getenv('PINECONE_INDEX_NAME', 'docqueryswap')
         self.pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY'))
         
         if self.index_name not in self.pc.list_indexes().names():
-            logging.info(f'Creating index {self.index_name}...')
+            logging.info('Creating index ' + self.index_name + '...')
             self.pc.create_index(
                 name=self.index_name,
                 dimension=384,
@@ -34,6 +34,7 @@ class PineconeVectorStore:
         result = self.index.query(
             vector=query_vector.tolist(),
             top_k=top_k,
-            include_metadata=True
+            include_metadata=True,
+            timeout=10  # Add timeout
         )
         return result.matches

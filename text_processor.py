@@ -8,18 +8,20 @@ class TextProcessor:
     def model(self):
         if self._model is None:
             from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer("all-MiniLM-L6-v2")
+            # Tiny model: 17MB, works on 512MB Render
+            self._model = SentenceTransformer("TaylorAI/gte-tiny")
         return self._model
 
     def split_text(self, text):
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=50
+            chunk_size=300,  # Smaller chunks = less memory
+            chunk_overlap=30
         )
         return splitter.split_text(text)
 
     def generate_embeddings(self, chunks):
-        return self.model.encode(chunks, normalize_embeddings=True)
+        # Process in smaller batches
+        return self.model.encode(chunks, normalize_embeddings=True, batch_size=8)
 
     def generate_query_embedding(self, query):
         return self.model.encode(query, normalize_embeddings=True)

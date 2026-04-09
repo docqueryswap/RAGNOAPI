@@ -1,0 +1,147 @@
+Project Title & One-Liner
+
+DocuQuery: A Production-Ready RAG Document Assistant
+An end-to-end Retrieval-Augmented Generation (RAG) application that allows users to query private documents using a free, cloud-deployed LLM.
+
+ Key Contributions 
+
+Architected and deployed a full-stack RAG system using Python, Flask, Pinecone (vector DB), and Sentence-Transformers.
+
+Integrated and evaluated 5+ LLM providers (OpenAI, Hugging Face, Gemini, Claude, Groq), ultimately settling on Groq's Llama 3.1 for its cost-effectiveness and reliability.
+
+Solved complex deployment challenges, including dependency conflicts, model deprecation errors, and cloud "cold start" issues on Render.
+
+Implemented a modular pipeline for document processing, text chunking, embedding generation, and context-aware prompt engineering.
+
+Reduced operational costs to $0/month by leveraging free-tier cloud services and open-weight models, demonstrating resourcefulness.
+
+📋 DocuQuery — Complete Debugging & Deployment Journey Now Live on Render
+Below is the full task flow from initial broken guide to a successfully deployed RAG application. Copy this text to document your project journey.
+
+📋 Copy Text
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                 DocuQuery RAG App — From Failure to Live 🚀                   ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+📅 DATE: April 9, 2026
+🎯 GOAL: Build a free, production-ready RAG document assistant
+📦 FINAL STACK: Flask + Pinecone + Groq (Llama 3.1) + Render
+
+────────────────────────────────────────────────────────────────────────────────
+🛠️ PHASE 1: THE ORIGINAL BROKEN GUIDE
+────────────────────────────────────────────────────────────────────────────────
+Problem: The original "DocuQuery" guide (from months ago) was completely broken.
+❌ OpenAI API → Requires prepaid credits (no free tier)
+❌ Pinecone SDK changed from `pinecone-client` to `pinecone`
+❌ LangChain split into multiple packages
+❌ Dependencies had version conflicts
+
+Action Taken:
+- Analyzed all breaking changes in the ecosystem
+- Decided to rebuild from scratch with modern, free alternatives
+
+────────────────────────────────────────────────────────────────────────────────
+🔄 PHASE 2: API HUNTING — 5 FAILED ATTEMPTS
+────────────────────────────────────────────────────────────────────────────────
+Goal: Find a FREE LLM API that works reliably.
+
+Attempt 1: OpenAI (gpt-4.1-mini)
+  → ❌ Requires $5+ prepaid credits. Abandoned.
+
+Attempt 2: Hugging Face Inference API (flan-t5-large, phi-2)
+  → ❌ 503 errors, cold starts, model echoed questions instead of answering.
+
+Attempt 3: Local Transformers (flan-t5-small/base/large)
+  → ❌ Generated gibberish ("a. a. a. a...") or repeated questions.
+  → ❌ 30-60 sec response time on CPU.
+
+Attempt 4: Google Gemini (gemini-2.0-flash)
+  → ❌ Quota exceeded after 1 request (429 error). Free tier effectively unusable.
+
+Attempt 5: Anthropic Claude (claude-3-haiku)
+  → ❌ No free tier; immediate 429 error.
+
+Attempt 6: Groq (llama3-8b-8192)
+  → ✅ Worked beautifully! Free tier: 30 RPM, 14,400 RPD.
+  → ⚠️ BUT: Model deprecated on Aug 30, 2025.
+
+Final Attempt: Groq (llama-3.1-8b-instant)
+  → ✅ SUCCESS! Free, fast (1-2 sec), high-quality answers.
+
+────────────────────────────────────────────────────────────────────────────────
+🐍 PHASE 3: DEPENDENCY & SYNTAX ERRORS
+────────────────────────────────────────────────────────────────────────────────
+Error 1: `Could not find a version that satisfies the requirement pinecone==8.2.0`
+  → Fix: Use flexible range `pinecone>=8.0,<9.0`
+
+Error 2: `TemplateNotFound: index.html`
+  → Fix: Run `mkdir -p templates` before starting
+
+Error 3: f-string syntax error in vector_store.py
+  → Broken: `f'{metadata['doc_id']}-{i}'`
+  → Fixed: `metadata['doc_id'] + '-' + str(i)`
+
+Error 4: `ModuleNotFoundError: No module named 'flask'`
+  → Fix: Run `pip install -r requirements.txt`
+
+────────────────────────────────────────────────────────────────────────────────
+☁️ PHASE 4: RENDER DEPLOYMENT — MEMORY & PYTHON VERSION
+────────────────────────────────────────────────────────────────────────────────
+Error 1: Python 3.14 incompatible with LangChain/Pydantic
+  → Fix: Added `.python-version` with `3.11.9`
+
+Error 2: `Out of memory (used over 512Mi)`
+  → Sentence-transformers `all-MiniLM-L6-v2` (90MB) too heavy
+  → Tried `BAAI/bge-small-en-v1.5` (33MB) — still OOM
+  → Final Fix:
+      • Lazy-load model (only when first used)
+      • Gunicorn with `--workers 1 --threads 1`
+      • Switched back to optimized `all-MiniLM-L6-v2`
+
+Error 3: Port binding failure
+  → Fix: Memory issue resolved; port bound automatically
+
+────────────────────────────────────────────────────────────────────────────────
+✅ FINAL WORKING CONFIGURATION
+────────────────────────────────────────────────────────────────────────────────
+Files Deployed:
+├── app.py                 # Flask server
+├── document_processor.py  # PDF/DOCX extraction
+├── text_processor.py      # Chunking + lazy-loaded embeddings
+├── vector_store.py        # Pinecone (serverless)
+├── rag_pipeline.py        # Groq LLM integration
+├── mcp_protocol.py        # Prompt styling
+├── requirements.txt       # All dependencies
+├── .python-version        # Python 3.11.9
+├── Procfile               # Gunicorn memory limits
+├── render.yaml            # Deployment config
+└── templates/index.html   # Web UI
+
+Environment Variables (set in Render):
+  GROQ_API_KEY, PINECONE_API_KEY, PINECONE_ENVIRONMENT, SECRET_KEY
+
+Live URL: https://doc-analyser-regk.onrender.com
+
+────────────────────────────────────────────────────────────────────────────────
+🎯 KEY LEARNINGS
+────────────────────────────────────────────────────────────────────────────────
+1. "Free" APIs often have hidden limits — Groq is a rare exception.
+2. Free cloud tiers (Render 512MB) require aggressive memory optimization.
+3. Lazy-loading ML models saves critical RAM at startup.
+4. Always check for model deprecation notices.
+5. F-strings with nested quotes are a silent killer in production.
+6. A clean `render.yaml` + `.python-version` prevents runtime surprises.
+
+────────────────────────────────────────────────────────────────────────────────
+📈 OUTCOME
+────────────────────────────────────────────────────────────────────────────────
+✅ Fully functional RAG application deployed on Render free tier
+✅ Zero monthly cost
+✅ 24/7 uptime (using UptimeRobot to prevent sleep)
+✅ Portfolio-ready project demonstrating real-world AI engineering
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         🎉 PROJECT COMPLETE & LIVE 🎉                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+    
+✅ Click the button above to copy the entire journey. Paste it into your README.md or portfolio.

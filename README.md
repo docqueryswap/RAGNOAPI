@@ -130,4 +130,4 @@ Found a bug or want to add a feature? PRs are welcome! Please open an issue firs
 MIT License — feel free to use this project for personal or commercial purposes.
 
 Built with ❤️ and a lot of debugging.
-DocuQuery — Finally working, thanks to Groq and Llama 3.1.
+DocuQuery — Finally working, thanks to Groq and Llama 3.1.# Trigger deploy - Thu Apr  9 15:56:43 UTC 2026

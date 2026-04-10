@@ -1,14 +1,19 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
+import logging
+
+logger = logging.getLogger(__name__)
 
 class TextProcessor:
     def __init__(self):
         self.model = None
 
     def _load_model(self):
-        # Load model ONCE at startup
         if self.model is None:
-            self.model = SentenceTransformer("all-MiniLM-L6-v2")
+            logger.info("Loading SentenceTransformer model...")
+            # ✅ CPU-only for Render compatibility
+            self.model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+            logger.info("Model loaded successfully!")
 
     def split_text(self, text):
         splitter = RecursiveCharacterTextSplitter(
@@ -18,7 +23,6 @@ class TextProcessor:
         return splitter.split_text(text)
 
     def generate_single_embedding(self, chunk):
-        # Process ONE chunk at a time to avoid memory spikes
         return self.model.encode(chunk, normalize_embeddings=True)
 
     def generate_query_embedding(self, query):

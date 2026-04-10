@@ -1,0 +1,13 @@
+.venv
+__pycache__
+*.pyc
+.env
+uploads/*
+.git
+.gitignore
+README.md
+note.txt
+projects.md
+Debug_history.txt
+render.yaml
+Procfile

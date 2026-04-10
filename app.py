@@ -1,7 +1,6 @@
 import logging
 from flask import Flask, render_template, request, jsonify
 import os, uuid
-from threading import Thread
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,13 +22,16 @@ text_proc = TextProcessor()
 rag = RAGPipeline()
 mcp = ModelContextProtocol()
 
-# ✅ FIXED: No global state - stateless access
+# ✅ FIXED: Single consistent namespace
+NAMESPACE = "rag-docs"
+
 def get_vector_db():
     return PineconeVectorStore()
 
-def process_file_background(file_path, filename, doc_id, namespace):
+def process_file_sync(file_path, filename, doc_id):
+    """Process file synchronously - reliable on Render"""
     try:
-        logging.info(f'Background processing started for {filename}')
+        logging.info(f'Processing started for {filename}')
         
         text = doc_proc.process_uploaded_file(file_path)
         chunks = text_proc.split_text(text)
@@ -39,13 +41,14 @@ def process_file_background(file_path, filename, doc_id, namespace):
             emb = text_proc.generate_single_embedding(chunk)
             embeddings.append(emb)
         
-        # ✅ Fresh connection, with namespace
         vdb = PineconeVectorStore()
-        vdb.store_documents(chunks, embeddings, {'doc_id': doc_id}, namespace=namespace)
+        vdb.store_documents(chunks, embeddings, {'doc_id': doc_id}, namespace=NAMESPACE)
         
-        logging.info(f'Background processing complete for {filename}')
+        logging.info(f'Processing complete for {filename}')
+        return True
     except Exception as e:
-        logging.error(f'Background processing error: {str(e)}')
+        logging.error(f'Processing error: {str(e)}')
+        return False
 
 @app.route('/')
 def home():
@@ -59,17 +62,19 @@ def upload_file():
         file_path = os.path.join(UPLOAD_FOLDER, filename)
         file.save(file_path)
         doc_id = str(uuid.uuid4())
-        namespace = f"doc_{doc_id}"
         
-        # ✅ Pass fresh connection to thread
-        Thread(target=process_file_background, args=(file_path, filename, doc_id, namespace), daemon=True).start()
+        # ✅ Process synchronously - no unreliable threads on Render
+        success = process_file_sync(file_path, filename, doc_id)
         
-        return jsonify({
-            'message': 'File uploaded! Processing in background...',
-            'doc_id': doc_id,
-            'namespace': namespace,
-            'status': 'processing'
-        })
+        if success:
+            return jsonify({
+                'message': 'File processed successfully!',
+                'doc_id': doc_id,
+                'status': 'ready'
+            })
+        else:
+            return jsonify({'error': 'Processing failed'}), 500
+            
     except Exception as e:
         logging.error(f'Upload error: {str(e)}')
         return jsonify({'error': str(e)}), 500
@@ -80,21 +85,21 @@ def ask():
         data = request.get_json()
         question = data['question']
         style = data.get('style', 'default')
-        namespace = data.get('namespace', 'doc_default')
 
         # ✅ Fresh connection every request
         vdb = get_vector_db()
         
-        # ✅ Check if namespace has data
+        # ✅ Check Pinecone directly - source of truth
         stats = vdb.get_index_stats()
-        if namespace not in stats.get('namespaces', {}):
-            return jsonify({'error': 'No documents found. Please upload a document first.'}), 400
+        
+        if NAMESPACE not in stats.get('namespaces', {}):
+            return jsonify({'error': 'No documents found in database. Please upload a document first.'}), 400
 
         q_embed = text_proc.generate_query_embedding(question)
-        docs = vdb.search_similar(q_embed, namespace=namespace)
+        docs = vdb.search_similar(q_embed, namespace=NAMESPACE)
         
         if not docs:
-            return jsonify({'error': 'No relevant content found in document.'}), 400
+            return jsonify({'error': 'No relevant content found.'}), 400
             
         context = '\n'.join([d['metadata']['text'] for d in docs])
 

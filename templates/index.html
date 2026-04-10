@@ -10,11 +10,12 @@
     button:hover { background: #059669; }
     #output { background: white; padding: 20px; border-radius: 12px; white-space: pre-wrap; border: 1px solid #e2e8f0; min-height: 120px; }
     .error { color: #dc2626; }
+    .success { color: #10b981; }
   </style>
 </head>
 <body>
   <h1>📄 DocuQuery</h1>
-  <p>Upload a document, then ask questions. Powered by Groq + Llama 3.1</p>
+  <p>Upload a document, then ask questions.</p>
 
   <div class='card'>
     <h3>1️⃣ Upload Document</h3>
@@ -40,19 +41,23 @@
   <div id='output'>💬 Answer will appear here...</div>
 
   <script>
-    let currentNamespace = null;
+    let documentReady = false;
     
     document.getElementById('uploadForm').onsubmit = async (e) => {
       e.preventDefault();
       const formData = new FormData(e.target);
-      document.getElementById('uploadStatus').innerHTML = '⏳ Processing...';
-      const res = await fetch('/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.error) {
-        document.getElementById('uploadStatus').innerHTML = `<span class='error'>❌ ${data.error}</span>`;
-      } else {
-        currentNamespace = data.namespace;
-        document.getElementById('uploadStatus').innerHTML = `✅ ${data.message}<br>📌 Wait 10-15 seconds before asking questions.`;
+      document.getElementById('uploadStatus').innerHTML = '⏳ Processing... (may take 10-20 seconds)';
+      try {
+        const res = await fetch('/upload', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.error) {
+          document.getElementById('uploadStatus').innerHTML = `<span class='error'>❌ ${data.error}</span>`;
+        } else {
+          documentReady = true;
+          document.getElementById('uploadStatus').innerHTML = `<span class='success'>✅ ${data.message}</span>`;
+        }
+      } catch (err) {
+        document.getElementById('uploadStatus').innerHTML = `<span class='error'>❌ Upload failed</span>`;
       }
     };
 
@@ -62,14 +67,14 @@
       const output = document.getElementById('output');
       
       if (!question) { output.textContent = 'Please enter a question.'; return; }
-      if (!currentNamespace) { output.innerHTML = '<span class=\'error\'>❌ Please upload a document first.</span>'; return; }
+      if (!documentReady) { output.innerHTML = '<span class=\'error\'>❌ Please upload a document first.</span>'; return; }
       
       output.innerHTML = '🤔 Thinking...';
       try {
         const res = await fetch('/ask', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question, style, namespace: currentNamespace })
+          body: JSON.stringify({ question, style })
         });
         const data = await res.json();
         if (data.error) {

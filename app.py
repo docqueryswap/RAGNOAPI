@@ -1,7 +1,8 @@
 import logging
+import time
 from flask import Flask, render_template, request, jsonify
 import os, uuid
-from threading import Thread
+from threading import Thread, Lock
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,12 +24,22 @@ text_proc = TextProcessor()
 rag = RAGPipeline()
 mcp = ModelContextProtocol()
 
-# Global variables with status tracking
+# Use a lock for thread-safe initialization
 vector_db = None
-processing_status = {}  # Track processing status by doc_id
+vector_db_lock = Lock()
+processing_status = {}
+
+def get_vector_db():
+    global vector_db
+    with vector_db_lock:
+        if vector_db is None:
+            logging.info('Initializing Pinecone connection...')
+            vector_db = PineconeVectorStore()
+            logging.info('Pinecone connected!')
+    return vector_db
 
 def process_file_background(file_path, filename, doc_id):
-    global vector_db, processing_status
+    global processing_status
     try:
         processing_status[doc_id] = 'processing'
         logging.info(f'Background processing started for {filename}')
@@ -41,10 +52,10 @@ def process_file_background(file_path, filename, doc_id):
             emb = text_proc.generate_single_embedding(chunk)
             embeddings.append(emb)
         
-        if vector_db is None:
-            vector_db = PineconeVectorStore()
+        # Get or create vector_db
+        vdb = get_vector_db()
+        vdb.store_documents(chunks, embeddings, {'doc_id': doc_id})
         
-        vector_db.store_documents(chunks, embeddings, {'doc_id': doc_id})
         processing_status[doc_id] = 'ready'
         logging.info(f'Background processing complete for {filename}')
     except Exception as e:
@@ -64,6 +75,9 @@ def upload_file():
         file.save(file_path)
         doc_id = str(uuid.uuid4())
         
+        # Initialize vector_db in main thread before background processing
+        get_vector_db()
+        
         Thread(target=process_file_background, args=(file_path, filename, doc_id), daemon=True).start()
         
         return jsonify({
@@ -82,23 +96,28 @@ def check_status(doc_id):
 
 @app.route('/ask', methods=['POST'])
 def ask():
-    global vector_db
     try:
         data = request.get_json()
         question = data['question']
         style = data.get('style', 'default')
-        doc_id = data.get('doc_id')
 
-        # Check if vector_db is initialized
-        if vector_db is None:
-            return jsonify({'error': 'No documents have been processed yet. Please upload a document first.'}), 400
+        # Get vector_db (will initialize if needed)
+        vdb = get_vector_db()
         
-        # Check if specific document is ready
-        if doc_id and processing_status.get(doc_id) != 'ready':
-            return jsonify({'error': f'Document is still processing. Current status: {processing_status.get(doc_id, "unknown")}'}), 400
+        # Check if we have any documents at all
+        try:
+            # Simple query to check if index has data
+            test_embed = text_proc.generate_query_embedding("test")
+            docs = vdb.search_similar(test_embed)
+            
+            if not docs or len(docs) == 0:
+                return jsonify({'error': 'No documents found in database. Please upload a document first.'}), 400
+        except Exception as e:
+            logging.error(f'Index check error: {str(e)}')
+            return jsonify({'error': 'Database connection issue. Please try again in a moment.'}), 500
 
         q_embed = text_proc.generate_query_embedding(question)
-        docs = vector_db.search_similar(q_embed)
+        docs = vdb.search_similar(q_embed)
         context = '\n'.join([d['metadata']['text'] for d in docs])
 
         prompt = mcp.get_context_prompt(style, question, context)

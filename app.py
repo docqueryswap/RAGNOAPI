@@ -22,28 +22,33 @@ doc_proc = DocumentProcessor()
 text_proc = TextProcessor()
 rag = RAGPipeline()
 mcp = ModelContextProtocol()
-vector_db = None
 
-# Background processing function
+# Global variables with status tracking
+vector_db = None
+processing_status = {}  # Track processing status by doc_id
+
 def process_file_background(file_path, filename, doc_id):
+    global vector_db, processing_status
     try:
+        processing_status[doc_id] = 'processing'
         logging.info(f'Background processing started for {filename}')
+        
         text = doc_proc.process_uploaded_file(file_path)
         chunks = text_proc.split_text(text)
         
-        # Process embeddings ONE CHUNK AT A TIME to avoid memory spikes
         embeddings = []
         for chunk in chunks:
             emb = text_proc.generate_single_embedding(chunk)
             embeddings.append(emb)
         
-        global vector_db
         if vector_db is None:
             vector_db = PineconeVectorStore()
         
         vector_db.store_documents(chunks, embeddings, {'doc_id': doc_id})
+        processing_status[doc_id] = 'ready'
         logging.info(f'Background processing complete for {filename}')
     except Exception as e:
+        processing_status[doc_id] = f'error: {str(e)}'
         logging.error(f'Background processing error: {str(e)}')
 
 @app.route('/')
@@ -59,20 +64,38 @@ def upload_file():
         file.save(file_path)
         doc_id = str(uuid.uuid4())
         
-        # Process in background thread - returns immediately
         Thread(target=process_file_background, args=(file_path, filename, doc_id), daemon=True).start()
         
-        return jsonify({'message': 'File uploaded! Processing in background...', 'doc_id': doc_id, 'status': 'processing'})
+        return jsonify({
+            'message': 'File uploaded! Processing in background...',
+            'doc_id': doc_id,
+            'status': 'processing'
+        })
     except Exception as e:
         logging.error(f'Upload error: {str(e)}')
         return jsonify({'error': str(e)}), 500
 
+@app.route('/status/<doc_id>', methods=['GET'])
+def check_status(doc_id):
+    status = processing_status.get(doc_id, 'unknown')
+    return jsonify({'doc_id': doc_id, 'status': status})
+
 @app.route('/ask', methods=['POST'])
 def ask():
+    global vector_db
     try:
         data = request.get_json()
         question = data['question']
         style = data.get('style', 'default')
+        doc_id = data.get('doc_id')
+
+        # Check if vector_db is initialized
+        if vector_db is None:
+            return jsonify({'error': 'No documents have been processed yet. Please upload a document first.'}), 400
+        
+        # Check if specific document is ready
+        if doc_id and processing_status.get(doc_id) != 'ready':
+            return jsonify({'error': f'Document is still processing. Current status: {processing_status.get(doc_id, "unknown")}'}), 400
 
         q_embed = text_proc.generate_query_embedding(question)
         docs = vector_db.search_similar(q_embed)
@@ -87,6 +110,5 @@ def ask():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    # Load model at startup (NO lazy loading)
     text_proc._load_model()
     app.run(host='0.0.0.0', port=5000, debug=False)
